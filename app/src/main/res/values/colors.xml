@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="location_tilte">#434C40</color>
+    <color name="location_subtitle">#81957B</color>
+    <color name="text_grey">#4c4c4c</color>
+    <color name="text_light_grey">#999999</color>
+</resources>

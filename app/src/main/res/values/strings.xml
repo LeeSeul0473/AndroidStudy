@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">AirQuality</string>
+    <string name="location_tilte">림사 로민사</string>
+    <string name="location_subtitle">중부 라노시아</string>
+    <string name="measured_at">측정시간</string>
+</resources>
