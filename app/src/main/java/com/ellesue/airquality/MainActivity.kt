@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Address
+import android.location.Geocoder
 import android.location.LocationManager
 import android.os.Bundle
 import android.provider.Settings
@@ -16,10 +18,23 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.ellesue.airquality.databinding.ActivityMainBinding
+import com.ellesue.airquality.retrofit.AirQualityResponse
+import com.ellesue.airquality.retrofit.AirQualityService
+import com.ellesue.airquality.retrofit.RetrofitConnection
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import java.io.IOException
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
 
 class MainActivity : AppCompatActivity() {
 
     lateinit var binding: ActivityMainBinding
+    lateinit var locationProvider: LocationProvider
 
     private val PERMISSIONS_REQUESET_CODE = 100
 
@@ -37,7 +52,122 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         checkAllPermissions()
+        updateUI()
+        setRefreshButton()
     }
+
+    private fun setRefreshButton() {
+        binding.btnRefresh.setOnClickListener{
+            updateUI()
+        }
+    }
+
+    private fun updateUI() {
+        locationProvider = LocationProvider(this)
+
+        val latitude: Double? = locationProvider.getLocationLatitude()
+        val longitude:Double? = locationProvider.getLocationLongitude()
+
+        if(latitude != null && longitude != null){
+
+            //Update Location
+            val address = getCurrentAddress(latitude,longitude)
+
+            address?.let {
+                binding.tvLocationTitle.text = "${it.thoroughfare}"
+                binding.tvLocationSubtitle.text = "${it.countryName} ${it.adminArea}"
+                //Toast.makeText(this, "위치를 갱신했습니다.", Toast.LENGTH_SHORT).show()
+            }
+
+            //Update Air Quality
+            getAirQualityData(latitude, longitude)
+
+        }else{
+            Toast.makeText(this, "위도, 경도 정보를 가져올 수 없습니다.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun getAirQualityData(latitude: Double, longitude: Double) {
+        var retrofitAPI = RetrofitConnection.getInstance().create(
+            AirQualityService::class.java
+        )
+
+        retrofitAPI.getAirQualityData(
+            latitude.toString(),
+            longitude.toString(),
+            "c1277941-4b6f-4093-91e4-4efa728526f2"
+        ).enqueue( object : Callback<AirQualityResponse> {
+            override fun onResponse(
+                call: Call<AirQualityResponse>,
+                response: Response<AirQualityResponse>
+            ) {
+                if(response.isSuccessful()){
+                    Toast.makeText(this@MainActivity, "최신 데이터로 업데이트 완료되었습니다.", Toast.LENGTH_LONG).show()
+                    response.body()?.let{updateAirUI(it)}
+                }else{
+                    Toast.makeText(this@MainActivity, "데이터를 가져오는 데 실패했습니다.", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            override fun onFailure(call: Call<AirQualityResponse>, t: Throwable) {
+                t.printStackTrace()
+                Toast.makeText(this@MainActivity, "데이터를 가져오는 데 실패했습니다.", Toast.LENGTH_LONG).show()
+
+            }
+        }
+        )
+    }
+
+    private fun updateAirUI(airQualityData: AirQualityResponse) {
+        val pollutionData = airQualityData.data.current.pollution
+
+        binding.tvCount.text = pollutionData.aqius.toString()
+        val dataTime = ZonedDateTime.parse(pollutionData.ts).withZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime()
+        val dateFormatter = DateTimeFormatter.ofPattern("YYYY.MM.dd MM:mm")
+
+        binding.tvCheckTime.text = dataTime.format(dateFormatter).toString()
+
+        when(pollutionData.aqius){
+            in 0..50->{
+                binding.tvTitle.text="좋음"
+                binding.imgBg.setImageResource(R.drawable.bg_good)
+            }
+
+            in 51..150->{
+                binding.tvTitle.text="보통"
+                binding.imgBg.setImageResource(R.drawable.bg_soso)
+            }
+
+            in 151..200->{
+                binding.tvTitle.text="나쁨"
+                binding.imgBg.setImageResource(R.drawable.bg_bad)
+            }
+
+            else ->{
+                binding.tvTitle.text="매우나쁨"
+                binding.imgBg.setImageResource(R.drawable.bg_worst)
+            }
+        }
+    }
+
+    private fun getCurrentAddress(latitude : Double, longitude: Double) : Address?{
+        val geoCoder = Geocoder(this, Locale.KOREA)
+
+        val addresses : List<Address>?
+
+        addresses = try {
+            geoCoder.getFromLocation(latitude, longitude, 7)
+        }catch (ioException : IOException){
+            Toast.makeText(this, "지오코더 서비스를 이용불가합니다.", Toast.LENGTH_LONG).show()
+            return null
+        }catch (illegatArgumentException : java.lang.IllegalArgumentException){
+            Toast.makeText(this, "주소가 발견되지 않았습니다.", Toast.LENGTH_LONG).show()
+            return null
+        }
+
+        return addresses?.getOrNull(0)
+    }
+
 
     private fun checkAllPermissions() {
         if(!isLocationServicesAvailable()){
@@ -111,7 +241,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             if(checkResult){
-                //위치가져옴
+                updateUI()
             }else{
                 Toast.makeText(this, "권한이 거부되었습니다. 권한을 허용해주세요.", Toast.LENGTH_SHORT).show()
                 finish()
