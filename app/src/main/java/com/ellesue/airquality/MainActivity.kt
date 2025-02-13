@@ -11,8 +11,11 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.registerForActivityResult
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -38,12 +41,27 @@ class MainActivity : AppCompatActivity() {
 
     private val PERMISSIONS_REQUESET_CODE = 100
 
+    var latitude : Double? = 0.0
+    var longitude : Double? = 0.0
+
     var REQUIRED_PERMISSIONS = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
         Manifest.permission.ACCESS_COARSE_LOCATION
     )
 
     lateinit var getGPSPermissionLauncher : ActivityResultLauncher<Intent>
+
+    val startMapActivityResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult(),
+        object : ActivityResultCallback<ActivityResult>{
+            override fun onActivityResult(result: ActivityResult) {
+                if(result?.resultCode?: 0 == Activity.RESULT_OK){
+                    latitude = result?.data?.getDoubleExtra("latitude", 0.0) ?: 0.0
+                    longitude = result?.data?.getDoubleExtra("longtitude", 0.0) ?: 0.0
+                    updateUI()
+                }
+            }
+        }
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +72,16 @@ class MainActivity : AppCompatActivity() {
         checkAllPermissions()
         updateUI()
         setRefreshButton()
+        setFab()
+    }
+
+    private fun setFab() {
+        binding.fab.setOnClickListener{
+            val intent = Intent(this, MapActivity::class.java)
+            intent.putExtra("currentLat", latitude)
+            intent.putExtra("currentLon", longitude)
+            startMapActivityResult.launch(intent)
+        }
     }
 
     private fun setRefreshButton() {
@@ -65,13 +93,15 @@ class MainActivity : AppCompatActivity() {
     private fun updateUI() {
         locationProvider = LocationProvider(this)
 
-        val latitude: Double? = locationProvider.getLocationLatitude()
-        val longitude:Double? = locationProvider.getLocationLongitude()
+        if(latitude==0.0 && longitude==0.0){
+            latitude = locationProvider.getLocationLatitude()
+            longitude = locationProvider.getLocationLongitude()
+        }
 
         if(latitude != null && longitude != null){
 
             //Update Location
-            val address = getCurrentAddress(latitude,longitude)
+            val address = getCurrentAddress(latitude!!,longitude!!)
 
             address?.let {
                 binding.tvLocationTitle.text = "${it.thoroughfare}"
@@ -80,7 +110,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             //Update Air Quality
-            getAirQualityData(latitude, longitude)
+            getAirQualityData(latitude!!, longitude!!)
 
         }else{
             Toast.makeText(this, "위도, 경도 정보를 가져올 수 없습니다.", Toast.LENGTH_LONG).show()
